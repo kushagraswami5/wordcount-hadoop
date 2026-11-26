@@ -1,0 +1,6 @@
+results/
+data/*
+!data/sample.txt
+__pycache__/
+*.pyc
+.venv/

@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<!-- Copy to $HADOOP_HOME/etc/hadoop/ on ALL 3 laptops -->
+<configuration>
+  <property>
+    <name>fs.defaultFS</name>
+    <value>hdfs://master:9000</value>
+  </property>
+</configuration>

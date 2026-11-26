@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Word Count Dashboard</title>
+<style>
+  :root { --bg:#f5f3ee; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; --accent:#d9480f; --rare:#1864ab; --line:#e4e1da; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:28px 32px 8px; max-width:1100px; margin:auto; }
+  header small { color:var(--muted); letter-spacing:.08em; text-transform:uppercase; font-size:12px; }
+  h1 { margin:6px 0 4px; font-size:28px; }
+  .sub { color:var(--muted); margin:0; font-size:14px; }
+  main { max-width:1100px; margin:auto; padding:16px 32px 40px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:18px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
+  .stat b { display:block; font-size:26px; font-variant-numeric:tabular-nums; }
+  .stat span { color:var(--muted); font-size:13px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  @media (max-width:800px){ .grid{grid-template-columns:1fr;} header,main{padding-left:16px;padding-right:16px;} }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px; }
+  .card h2 { margin:0 0 4px; font-size:17px; }
+  .card p.note { margin:0 0 14px; color:var(--muted); font-size:13px; }
+  .row { display:grid; grid-template-columns:26px 120px 1fr 64px; align-items:center; gap:10px; padding:5px 0; font-size:14px; }
+  .rank { color:var(--muted); font-variant-numeric:tabular-nums; }
+  .word { font-weight:600; overflow:hidden; text-overflow:ellipsis; }
+  .bar { height:12px; border-radius:6px; background:var(--accent); min-width:3px; }
+  .rare .bar { background:var(--rare); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; color:var(--muted); }
+  .toolbar { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:18px; }
+  .toolbar a, .toolbar button { font:inherit; font-size:14px; padding:8px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); text-decoration:none; cursor:pointer; }
+  .toolbar a.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .toolbar input { font:inherit; font-size:14px; padding:8px 12px; border-radius:8px; border:1px solid var(--line); width:180px; }
+  #hit { font-size:14px; color:var(--muted); }
+  .empty { background:#fff4e6; border:1px solid #ffd8a8; padding:18px; border-radius:12px; }
+  footer { color:var(--muted); font-size:12px; text-align:center; padding:10px 0 30px; }
+  code { background:#eee; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<header>
+  <small>CSBB 422 · Big Data Analytics · Project 1</small>
+  <h1>Word Count with Hadoop MapReduce</h1>
+  <p class="sub">Results from the MapReduce job on the Hadoop cluster{% if d.modified %} · last run {{ d.modified }}{% endif %}</p>
+</header>
+<main>
+{% if not d.has_data %}
+  <div class="empty">
+    No results yet. Run the job first:<br><br>
+    On the Hadoop master: <code>./scripts/run_hadoop_job.sh</code><br>
+    Or a local test without Hadoop: <code>./scripts/run_local_test.sh</code><br><br>
+    Then refresh this page.
+  </div>
+{% else %}
+  <div class="stats">
+    <div class="stat"><b>{{ "{:,}".format(d.total_words) }}</b><span>Total words processed</span></div>
+    <div class="stat"><b>{{ "{:,}".format(d.unique_words) }}</b><span>Unique words</span></div>
+    <div class="stat"><b>{{ "{:,}".format(d.words_seen_once) }}</b><span>Words that appear only once</span></div>
+  </div>
+
+  <div class="toolbar">
+    <a href="/?stop=1" class="{{ 'on' if hide_stop }}">Hide stop words</a>
+    <a href="/?stop=0" class="{{ 'on' if not hide_stop }}">Show all words</a>
+    <form onsubmit="lookup(event)" style="display:flex;gap:8px;align-items:center">
+      <input id="q" placeholder="Look up a word…">
+      <button>Search</button>
+      <span id="hit"></span>
+    </form>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Top 10 most frequent words</h2>
+      <p class="note">{{ "Common words like “the” and “and” are hidden." if hide_stop else "Every word, including common ones like “the”." }}</p>
+      {% set maxc = d.top[0][1] if d.top else 1 %}
+      {% for w, c in d.top %}
+      <div class="row">
+        <span class="rank">{{ loop.index }}</span>
+        <span class="word" title="{{ w }}">{{ w }}</span>
+        <div class="bar" style="width:{{ (c / maxc * 100)|round(1) }}%"></div>
+        <span class="num">{{ "{:,}".format(c) }}</span>
+      </div>
+      {% endfor %}
+    </section>
+
+    <section class="card rare">
+      <h2>10 rarest words</h2>
+      <p class="note">Lowest counts, with ties sorted A→Z. {{ "{:,}".format(d.words_seen_once) }} words tie at a count of 1.</p>
+      {% for w, c in d.rare %}
+      <div class="row">
+        <span class="rank">{{ loop.index }}</span>
+        <span class="word" title="{{ w }}">{{ w }}</span>
+        <div class="bar" style="width:{{ 8 * c }}%"></div>
+        <span class="num">{{ c }}</span>
+      </div>
+      {% endfor %}
+    </section>
+  </div>
+{% endif %}
+</main>
+<footer>Source: <code>{{ d.results_file }}</code> (copied from HDFS <code>/wordcount/output</code>)</footer>
+<script>
+async function lookup(e){
+  e.preventDefault();
+  const q = document.getElementById('q').value;
+  const r = await fetch('/search?q=' + encodeURIComponent(q));
+  const j = await r.json();
+  document.getElementById('hit').textContent = j.word ? `“${j.word}” appears ${j.count.toLocaleString()} time(s)` : '';
+}
+</script>
+</body>
+</html>

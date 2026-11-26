@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!-- Copy to $HADOOP_HOME/etc/hadoop/ on ALL 3 laptops -->
+<configuration>
+  <property>
+    <name>dfs.replication</name>
+    <value>2</value> <!-- 2 workers, so 2 copies of each block -->
+  </property>
+  <property>
+    <name>dfs.namenode.name.dir</name>
+    <value>file:///home/hadoop/hadoopdata/namenode</value>
+  </property>
+  <property>
+    <name>dfs.datanode.data.dir</name>
+    <value>file:///home/hadoop/hadoopdata/datanode</value>
+  </property>
+</configuration>

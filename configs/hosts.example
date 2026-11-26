@@ -1,0 +1,4 @@
+# Add these lines to /etc/hosts on ALL 3 laptops (use your real IPs: run `hostname -I`)
+192.168.1.10   master
+192.168.1.11   worker1
+192.168.1.12   worker2
