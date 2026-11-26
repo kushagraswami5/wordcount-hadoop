@@ -36,6 +36,24 @@
   .empty { background:#fff4e6; border:1px solid #ffd8a8; padding:18px; border-radius:12px; }
   footer { color:var(--muted); font-size:12px; text-align:center; padding:10px 0 30px; }
   code { background:#eee; padding:1px 5px; border-radius:4px; }
+  .input-card { margin-bottom:18px; }
+  .input-grid { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+  @media (max-width:800px){ .input-grid{grid-template-columns:1fr;} }
+  .files { list-style:none; margin:0; padding:0; font-size:14px; max-height:180px; overflow:auto; }
+  .files li { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--line); }
+  .files li span.sz { color:var(--muted); font-variant-numeric:tabular-nums; margin-left:auto; }
+  .files form { margin:0; }
+  .x { border:none; background:none; color:var(--muted); cursor:pointer; font-size:16px; padding:0 4px; }
+  .x:hover { color:#c92a2a; }
+  .upload { display:flex; flex-direction:column; gap:10px; font-size:14px; }
+  .upload label { display:flex; gap:6px; align-items:center; }
+  .btn { font:inherit; font-size:14px; padding:9px 16px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); cursor:pointer; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .engine { display:inline-block; font-size:12px; padding:2px 8px; border-radius:999px; background:#e7f5ff; color:var(--rare); margin-left:6px; vertical-align:middle; }
+  .msg { background:#ebfbee; border:1px solid #b2f2bb; padding:10px 14px; border-radius:10px; margin-bottom:14px; font-size:14px; }
+  #log { display:none; margin-top:12px; background:#1d1d1f; color:#e9ecef; font:12px/1.5 ui-monospace, Menlo, Consolas, monospace; padding:12px; border-radius:10px; max-height:220px; overflow:auto; white-space:pre-wrap; }
+  #jobstate { font-size:14px; margin-left:10px; color:var(--muted); }
 </style>
 </head>
 <body>
@@ -45,12 +63,46 @@
   <p class="sub">Results from the MapReduce job on the Hadoop cluster{% if d.modified %} · last run {{ d.modified }}{% endif %}</p>
 </header>
 <main>
+{% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+
+  <section class="card input-card">
+    <h2>Input data <span class="engine">Runs on: {{ engine }}</span></h2>
+    <p class="note">Upload .txt files, then run the MapReduce job to count their words.</p>
+    <div class="input-grid">
+      <div>
+        <b style="font-size:14px">Current files ({{ files|length }}{% if files %}, {{ total_size }}{% endif %})</b>
+        {% if files %}
+        <ul class="files">
+          {% for f in files %}
+          <li>
+            <span>{{ f.name }}</span><span class="sz">{{ f.size }}</span>
+            <form method="post" action="/delete/{{ f.name }}" onsubmit="return confirm('Remove {{ f.name }}?')">
+              <button class="x" title="Remove">✕</button>
+            </form>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="note" style="margin-top:8px">No input files yet.</p>
+        {% endif %}
+      </div>
+      <form class="upload" method="post" action="/upload" enctype="multipart/form-data">
+        <input type="file" name="files" accept=".txt,text/plain" multiple required>
+        <label><input type="radio" name="mode" value="replace" checked> Replace the current files</label>
+        <label><input type="radio" name="mode" value="add"> Add to the current files</label>
+        <div><button class="btn">Upload</button></div>
+      </form>
+    </div>
+    <div style="margin-top:16px; display:flex; align-items:center; flex-wrap:wrap">
+      <button class="btn primary" id="runbtn" onclick="runJob()" {% if not files %}disabled{% endif %}>▶ Run job</button>
+      <span id="jobstate"></span>
+    </div>
+    <pre id="log"></pre>
+  </section>
+
 {% if not d.has_data %}
   <div class="empty">
-    No results yet. Run the job first:<br><br>
-    On the Hadoop master: <code>./scripts/run_hadoop_job.sh</code><br>
-    Or a local test without Hadoop: <code>./scripts/run_local_test.sh</code><br><br>
-    Then refresh this page.
+    No results yet. Upload a .txt file above and click <b>Run job</b>.
   </div>
 {% else %}
   <div class="stats">
@@ -108,6 +160,35 @@ async function lookup(e){
   const j = await r.json();
   document.getElementById('hit').textContent = j.word ? `“${j.word}” appears ${j.count.toLocaleString()} time(s)` : '';
 }
+
+const runbtn = document.getElementById('runbtn');
+const logEl = document.getElementById('log');
+const stateEl = document.getElementById('jobstate');
+
+async function runJob(){
+  const r = await fetch('/run', {method:'POST'});
+  const j = await r.json();
+  if (!j.started) { stateEl.textContent = j.reason; return; }
+  poll();
+}
+
+async function poll(){
+  const j = await (await fetch('/status')).json();
+  if (j.log) { logEl.style.display = 'block'; logEl.textContent = j.log; logEl.scrollTop = logEl.scrollHeight; }
+  if (j.running) {
+    runbtn.disabled = true;
+    stateEl.textContent = `Running on ${j.engine}…`;
+    setTimeout(poll, 1500);
+  } else if (j.ok === true) {
+    stateEl.textContent = `Finished at ${j.finished}. Loading results…`;
+    setTimeout(() => location.href = '/?msg=' + encodeURIComponent('Job finished. Results updated.'), 800);
+  } else if (j.ok === false) {
+    runbtn.disabled = false;
+    stateEl.textContent = 'Job failed. See the log below.';
+  }
+}
+// If a job is already running when the page loads (e.g. after a refresh), keep showing it
+fetch('/status').then(r => r.json()).then(j => { if (j.running) poll(); });
 </script>
 </body>
 </html>

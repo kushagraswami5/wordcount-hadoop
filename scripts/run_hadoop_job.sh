@@ -16,6 +16,9 @@ if [ -z "$STREAMING_JAR" ]; then
   echo "Could not find hadoop-streaming jar. Is HADOOP_HOME set?"; exit 1
 fi
 
+echo "==> Clearing old HDFS input (the local $INPUT_LOCAL/ folder is the source of truth)"
+hdfs dfs -rm -r -f "$HDFS_IN"
+
 echo "==> Uploading $INPUT_LOCAL/*.txt to HDFS $HDFS_IN"
 hdfs dfs -mkdir -p "$HDFS_IN"
 hdfs dfs -put -f "$INPUT_LOCAL"/*.txt "$HDFS_IN"/
